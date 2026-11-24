@@ -1,0 +1,53 @@
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# env
+.env
+.env.local
+.env*.local
+
+# database (SQLite dev)
+prisma/*.db
+prisma/*.db-journal
+prisma/*.db-wal
+prisma/*.db-shm
+prisma/migrations/dev.db*
+
+# WhatsApp session credentials — NEVER commit
+storage/
+gateway/storage/
+*.session
+auth.db
+auth.db-wal
+auth.db-shm
+qr-url.txt
+
+# gateway runtime
+gateway/*.log
+*.log
+logs/
+
+# Nano engine (nano-engine/) — the *code* is versioned with the panel so both
+# halves live in one repo; everything the bot generates or downloads is not.
+# node_modules/, *.log, auth.db and qr-url.txt above already cover part of this;
+# these are the engine-specific paths.
+nano-engine/data/
+nano-engine/sessions/
+nano-engine/storage/
+nano-engine/tmp/
+nano-engine/bin/
+nano-engine/lib/gist/hasil/
+nano-engine/lib/gist/tmp/
+nano-engine/lib/gist/uji.log
+nano-engine/lib/gist/hasil-uji.json
+
+# misc
+.DS_Store
+*.pem
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.turbo

@@ -1,0 +1,1087 @@
+@import 'tailwindcss';
+
+/* Dark mode is class-driven so the user's preference can be forced
+   (data-theme on <html>), rather than only following the OS. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   Near-black base, translucent glass surfaces, a single neon-green accent.
+   Everything downstream references these names, so re-theming stays a change
+   in one place. Green is an accent — never a flood fill.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Light mode — kept functional, but the product is designed dark. */
+  --background: #eef1f4;
+  --surface: #ffffff;
+  --elevated: #ffffff;
+  --overlay: rgba(255, 255, 255, 0.75);
+  --glass: rgba(255, 255, 255, 0.75);
+  --glass-strong: rgba(255, 255, 255, 0.9);
+
+  --foreground: #0e1420;
+  --muted: #e6eaef;
+  --muted-foreground: #5f6b7a;
+
+  --border: rgba(14, 20, 32, 0.1);
+  --border-strong: rgba(14, 20, 32, 0.2);
+
+  --primary: #0f766e;
+  --primary-hover: #0d5f58;
+  --primary-foreground: #ffffff;
+  --primary-soft: rgba(15, 118, 110, 0.12);
+  --glow: rgba(15, 118, 110, 0.28);
+
+  --accent: #1d4ed8;
+  --danger: #dc2626;
+  --warning: #b45309;
+  --success: #0f766e;
+  --info: #1d4ed8;
+
+  --ring: rgba(15, 118, 110, 0.45);
+  --shadow-color: 15 23 34;
+}
+
+.dark {
+  /* Dark mode — the default experience. Deep slate, not pure black: a pure
+     #050505 base reads "cyberpunk"; a blue-tinted slate reads "infrastructure". */
+  --background: #0a0e16;
+  --surface: #101725;
+  --elevated: #16202f;
+  --overlay: rgba(255, 255, 255, 0.045);
+  --glass: rgba(255, 255, 255, 0.045);
+  --glass-strong: rgba(255, 255, 255, 0.07);
+
+  --foreground: #eef2f7;
+  --muted: rgba(255, 255, 255, 0.05);
+  --muted-foreground: #8b96a8;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  /* Teal-cyan accent instead of neon green: it stays on-brand (same hue
+     family) but calms the panel down from a rave to an ops tool. */
+  --primary: #2dd4bf;
+  --primary-hover: #5eead4;
+  --primary-foreground: #05201c;
+  --primary-soft: rgba(45, 212, 191, 0.12);
+  --glow: rgba(45, 212, 191, 0.3);
+
+  --accent: #38bdf8;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --success: #2dd4bf;
+  --info: #38bdf8;
+
+  --ring: rgba(45, 212, 191, 0.5);
+  --shadow-color: 0 0 0;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-overlay: var(--overlay);
+  --color-glass: var(--glass);
+  --color-glass-strong: var(--glass-strong);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-soft: var(--primary-soft);
+  --color-glow: var(--glow);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-ring: var(--ring);
+
+  /* Medium radius — glassy, never pill-shaped for cards. */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --font-sans: var(--font-sans-body), ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', Roboto, sans-serif;
+  --font-display: var(--font-sans-display), var(--font-sans-body), ui-sans-serif, system-ui,
+    sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+
+  /*
+     Type scale — opt-in named sizes (custom utilities, so they never collide
+     with Tailwind's built-in text-xs..text-base).
+
+     The codebase currently reaches for arbitrary `text-[Npx]` values (~300 of
+     them). That works, but every value is its own CSS rule and it is easy to
+     drift between 11/12/13px. This scale is the intended set: use it for new
+     work and migrate old work toward it over time. It is additive — an old
+     arbitrary size left behind does not break anything.
+
+     Tailwind v4 emits a `text-<name>` utility from each `--text-<name>` token
+     (a utility is generated only when its class appears in source).
+
+       text-eyebrow  10.5px  dense all-caps eyebrow / section label / badge
+       text-tiny     11.5px  small labels, meta lines
+       text-s      12.5px   hints, timestamps, secondary text
+       text-note   12px     small notes, meta
+       text-mid    13px     compact body (the old dominant `text-[13px]`)
+       text-s      12.5px   hints, secondary text
+       text-tiny   11.5px   small labels
+       text-body   14px     default body copy
+       text-lead   15px     emphasized body, card titles
+       text-h      17px     card headings
+       text-page   20px     page section headings
+       text-stat   26px     hero numbers / big stats
+  */
+  --text-eyebrow: 0.65625rem; /* 10.5px */
+  --text-label: 0.625rem; /* 10px, dense all-caps eyebrow / badge */
+  --text-xs2: 0.6875rem; /* 11px */
+  --text-tiny: 0.71875rem; /* 11.5px */
+  --text-s: 0.78125rem; /* 12.5px */
+  --text-mid: 0.8125rem; /* 13px */
+  --text-mid-lg: 0.84375rem; /* 13.5px */
+  --text-note: 0.75rem; /* 12px */
+  --text-body: 0.875rem; /* 14px */
+  --text-lead: 0.9375rem; /* 15px */
+  --text-h: 1.0625rem; /* 17px */
+  --text-page: 1.25rem; /* 20px */
+  --text-stat: 1.625rem; /* 26px */
+
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-scale-in: scale-in 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-float: float 7s ease-in-out infinite;
+  --animate-float-slow: float 11s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-pulse-soft: pulse-soft 2.4s ease-in-out infinite;
+  --animate-glow-breathe: glow-breathe 4.5s ease-in-out infinite;
+  --animate-sheet-up: sheet-up 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-panel-in: panel-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-drawer-in: drawer-in 0.36s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-marquee: marquee 38s linear infinite;
+  --animate-spin-slow: spin 2.4s linear infinite;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BASE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+    /* Stops iOS from inflating body text when a phone is turned landscape. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  /*
+    Touch behaviour on the controls themselves. `manipulation` keeps scrolling
+    and pinch-zoom available but removes the double-tap-zoom delay, which is the
+    difference between a tap that feels instant and one that feels laggy.
+  */
+  a,
+  button,
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'],
+  summary,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+
+  body {
+    /* Not a flat fill: two soft accent blooms in the corners and a calm
+       vertical wash. Subtle enough to sit under dense dashboards without
+       competing with the data. */
+    background-color: var(--background);
+    background-image:
+      radial-gradient(1100px 520px at 85% -8%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 68%),
+      radial-gradient(820px 480px at 4% 104%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 70%),
+      linear-gradient(180deg, color-mix(in srgb, var(--surface) 60%, var(--background)) 0%, var(--background) 46%);
+    background-attachment: fixed;
+    background-repeat: no-repeat, no-repeat, no-repeat;
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Light mode keeps a calm, near-white canvas instead of the bloom. */
+  html:not(.dark) body {
+    background-image:
+      radial-gradient(1100px 520px at 85% -12%, rgba(15, 118, 110, 0.06), transparent 70%),
+      linear-gradient(180deg, #ffffff 0%, #eef1f4 100%);
+    background-repeat: no-repeat, no-repeat;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Only show focus rings for keyboard users, but never remove them. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--primary-soft);
+    color: var(--foreground);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--muted-foreground);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITIES — GLASS
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Default surface for cards and panels: solid fill with a hairline border and
+   a soft depth shadow — crisp, cheap to paint, and consistent on busy pages.
+   Blur is reserved for things that genuinely float over content (topbar,
+   mobile bottom bar, drawers), so the glass cost stays where it matters.
+
+   Deliberately leaves the border to the caller (`border border-border`). A
+   shorthand here would beat any `border-<colour>` class the caller adds —
+   custom `@utility` rules are emitted after Tailwind's own — which would make
+   accent-bordered cards impossible to express. */
+@utility glass-panel {
+  background-color: color-mix(in srgb, var(--surface) 92%, var(--background));
+  background-image: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.035) 0%,
+    transparent 100%
+  );
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+    0 18px 44px -30px rgba(var(--shadow-color), 0.85);
+}
+
+/* Real glass: the blur surfaces. Used sparingly, on detached chrome. */
+@utility glass {
+  background-color: var(--overlay);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid var(--border);
+}
+
+@utility glass-strong {
+  background-color: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: blur(26px) saturate(165%);
+  -webkit-backdrop-filter: blur(26px) saturate(165%);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+    0 30px 70px -40px rgba(0, 0, 0, 0.95);
+}
+
+/* Floating navigation: glass plus a lift so it reads as detached. */
+@utility glass-float {
+  background-color: color-mix(in srgb, var(--surface) 76%, transparent);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  border: 1px solid var(--border);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    0 24px 64px -30px rgba(var(--shadow-color), 0.9);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITIES — GLOW & FX
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@utility glow-primary {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 32%, transparent),
+    0 10px 34px -14px var(--glow);
+}
+
+@utility glow-soft {
+  box-shadow: 0 14px 46px -20px var(--glow);
+}
+
+/* The "selected/active plan" halo — kept, but toned down from neon. */
+@utility glow-neon {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 40%, transparent),
+    0 0 28px -8px var(--glow);
+}
+
+@utility text-glow {
+  text-shadow: 0 0 22px var(--glow);
+}
+
+/*
+   Theme-aware gradient text: dark mode blends foreground → primary → foreground
+   (white to teal on black); light mode flips to foreground → primary → foreground
+   (near-black to a darker teal on white) so the middle stop never becomes a
+   washed-out light patch. The gradient is subtle in both themes — it tints,
+   it does not shout.
+*/
+@utility text-gradient {
+  background: linear-gradient(
+    120deg,
+    var(--foreground) 12%,
+    var(--primary) 62%,
+    var(--foreground) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+
+
+/*
+   Poster-safe gradient text. Unlike `text-gradient` it is always light, so it
+   stays legible on the dark artwork banners that do not follow the theme.
+*/
+@utility text-gradient-neon {
+  background: linear-gradient(
+    100deg,
+    #ffffff 6%,
+    color-mix(in srgb, var(--primary) 88%, #ffffff) 58%,
+    #ffffff 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Faint grid, evoking an engineering surface. */
+@utility grid-background {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+/* Fine grain — overlay on artwork/banners so gradients do not band. */
+@utility grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+
+@utility radial-fade {
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+@utility aurora {
+  background:
+    radial-gradient(
+      ellipse 60% 50% at 50% -10%,
+      color-mix(in srgb, var(--primary) 20%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 40% 40% at 85% 10%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 70%
+    );
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITIES — INTERACTION
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@utility card-hover {
+  transition:
+    transform 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.32s ease,
+    box-shadow 0.32s ease,
+    background-color 0.32s ease;
+
+  &:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+      0 22px 60px -34px rgba(0, 0, 0, 0.95),
+      0 0 32px -18px var(--glow);
+  }
+}
+
+@utility skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--muted);
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--foreground) 8%, transparent),
+      transparent
+    );
+    animation: shimmer 1.8s linear infinite;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+   Scroll-reveal entrance used by the marketing sections (components/marketing/reveal.tsx)
+   in place of the motion/react chunk. The element starts hidden and settles in
+   when the IntersectionObserver adds `.reveal-shown`. It animates opacity + a
+   small translateY on the compositor-friendly properties only.
+
+   Reduced motion: the global `prefers-reduced-motion` rule below zeroes the
+   transition duration, so `.reveal` snaps to visible with no movement. Even if
+   the observer never fires (script blocked), the page-enter fallback keeps
+   content readable — nothing ships as opacity:0 that cannot recover.
+*/
+@utility reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal-shown {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* One-shot entrance for the marketing product-preview mock-up. Elements start
+   hidden and fade in on mount with a per-element `animation-delay` set inline
+   (the stagger). No IntersectionObserver needed: this block is above the fold. */
+@utility preview-fade {
+  opacity: 0;
+  animation: preview-fade-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Bar-chart column grow: animates height from 0 to the inline value. */
+@utility preview-bar {
+  animation: preview-bar-grow 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes preview-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes preview-bar-grow {
+  from {
+    height: 0;
+  }
+}
+
+/* Reduced motion: nothing animates, content is simply visible. The keyframes
+   would otherwise leave `.preview-fade` stuck at opacity:0 if it never runs. */
+@media (prefers-reduced-motion: reduce) {
+  .preview-fade {
+    opacity: 1;
+    animation: none;
+  }
+  .preview-bar {
+    animation: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   KEYFRAMES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-18px) translateX(6px);
+  }
+}
+
+/* Expanding halo for live status indicators. */
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 55%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes glow-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Floating side panel sliding in from the left edge. */
+@keyframes drawer-in {
+  from {
+    opacity: 0;
+    transform: translateX(-18px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Route/segment transition helper — used by the dashboard shell. */
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.page-enter {
+  animation: page-enter 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/*
+   Content must never depend on this animation. If the visitor asks for reduced
+   motion the wrapper stops moving entirely, and because the animation is what
+   fades the panel in, dropping it also guarantees the page is visible the
+   instant it paints.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
+
+  /* Scroll reveals do not move; they simply become visible. */
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AUTH — NANO BOT PANEL
+   The login / register / reset frame: one glass card floating on a dark
+   cyberpunk canvas. Every rule below is scoped to an `auth-*` class so the
+   dashboard never picks any of it up, and none of it carries meaning — the
+   forms stay plain semantic HTML driven by the existing auth API.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Glass card: 4% white fill, real blur, thin edge, green ambient bloom. */
+.auth-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  background-color: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+    0 34px 80px -48px rgba(0, 0, 0, 0.95),
+    0 0 70px -34px var(--glow);
+}
+
+/* Hairline that runs the top edge of the card and fades out at both ends. */
+.auth-hairline {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--primary) 55%, transparent) 35%,
+    color-mix(in srgb, var(--primary) 55%, transparent) 65%,
+    transparent
+  );
+}
+
+/* Small monospace label above the heading. */
+.auth-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+/* Understated inline link — colour shift plus a slide, nothing more. */
+.auth-link {
+  color: var(--primary);
+  font-weight: 500;
+  transition: color 0.2s ease, opacity 0.2s ease, text-shadow 0.2s ease;
+
+  &:hover {
+    text-shadow: 0 0 18px var(--glow);
+  }
+}
+
+/*
+   Auth fields.
+
+   Deliberately plain (unlayered) rules rather than `@utility`: Tailwind sorts
+   its own utilities after custom ones, so the shared `fieldStyles` the Input
+   component ships with — `focus:border-primary/60`, `focus:bg-muted/60` — would
+   have won the cascade and flattened the neon focus state. Unlayered CSS beats
+   layered CSS outright, which also means the invalid state has to be restated
+   below, in the same scope.
+
+   Focus is the one animated moment: the edge goes neon, then a soft halo opens
+   underneath it.
+*/
+.auth-input {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.3s ease,
+    background-color 0.25s ease;
+
+  &::placeholder {
+    color: color-mix(in srgb, var(--muted-foreground) 75%, transparent);
+  }
+
+  &:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  &:focus {
+    border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+    background-color: rgba(255, 255, 255, 0.06);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent),
+      0 0 26px -8px var(--glow),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.07);
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+/*
+   Invalid state, restated here because `fieldStyles` expresses it with Tailwind
+   utilities and this block outranks them. The API's own field errors set
+   `aria-invalid`, so this is only ever a visual echo of a server-side check.
+*/
+.auth-input[aria-invalid='true'] {
+  border-color: color-mix(in srgb, var(--danger) 60%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+.auth-input[aria-invalid='true']:focus {
+  border-color: color-mix(in srgb, var(--danger) 72%, transparent);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--danger) 16%, transparent),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Primary auth action: neon fill, dark type, lifts on hover, presses down. */
+.auth-btn {
+  border-radius: 14px;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  box-shadow:
+    0 12px 32px -14px var(--glow),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.3);
+  transition:
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease,
+    background-color 0.2s ease;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1.5px);
+    background-color: var(--primary-hover);
+    box-shadow:
+      0 18px 42px -16px var(--glow),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.34);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0) scale(0.97);
+  }
+}
+
+/* Live "bot status" mock card on the brand side of the auth split.
+    A slightly brighter glass panel than `.auth-card` so it reads as the
+    living heart of the panel; the demo rows inside fade with opacity in
+    the markup. */
+.auth-livecard {
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.06),
+    0 24px 60px -40px rgba(0, 0, 0, 0.9),
+    0 0 48px -30px var(--glow);
+}
+html:not(.dark) .auth-livecard {
+  background-color: rgba(15, 118, 110, 0.06);
+}
+
+/* The form card's children stagger in (heading, then fields, then footer)
+    for a calmer entrance than one big fade-up on the whole card. */
+.auth-card > * {
+  animation: auth-stagger 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.auth-card > :nth-child(2) {
+  animation-delay: 60ms;
+}
+.auth-card > :nth-child(3) {
+  animation-delay: 120ms;
+}
+
+@keyframes auth-stagger {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-card > * {
+    animation: none;
+  }
+}
+
+/* Faint horizontal scanlines for the visual half of the split. */
+.auth-hud {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 5px,
+    rgba(255, 255, 255, 0.022) 5px 6px
+  );
+}
+
+/*
+   Light mode keeps the same silhouette instead of going flat: the card turns
+   into white glass with a darker edge so the neon focus state still reads.
+*/
+html:not(.dark) .auth-card {
+  background-color: rgba(255, 255, 255, 0.72);
+  border-color: rgba(8, 9, 11, 0.09);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.9),
+    0 34px 80px -52px rgba(0, 0, 0, 0.4);
+}
+
+html:not(.dark) .auth-input {
+  border-color: rgba(8, 9, 11, 0.12);
+  background-color: rgba(255, 255, 255, 0.75);
+  box-shadow: none;
+
+  &:focus {
+    border-color: color-mix(in srgb, var(--primary) 65%, transparent);
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+  }
+}
+
+/* ── motion ─────────────────────────────────────────────────────────────── */
+
+@keyframes auth-drift-a {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate3d(4%, 5%, 0) scale(1.08);
+    opacity: 1;
+  }
+}
+
+@keyframes auth-drift-b {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1.05);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate3d(-5%, -4%, 0) scale(1);
+    opacity: 1;
+  }
+}
+
+/* A single line sweeping the canvas — the only fast thing on the page. */
+@keyframes auth-scan {
+  0% {
+    transform: translateY(-10vh);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.7;
+  }
+  88% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(110vh);
+    opacity: 0;
+  }
+}
+
+/* Particle drift: slow, small, and never in phase. */
+@keyframes auth-orb {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate3d(6px, -22px, 0);
+    opacity: 0.9;
+  }
+}
+
+/* Ambient bloom behind the card. */
+@keyframes auth-bloom {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.06);
+  }
+}
+
+/* Plain classes (not utilities) so a reduced-motion override can switch the
+   whole set off in one place. The page still paints correctly without them. */
+.auth-anim-drift-a {
+  animation: auth-drift-a 24s ease-in-out infinite;
+}
+
+.auth-anim-drift-b {
+  animation: auth-drift-b 30s ease-in-out infinite;
+}
+
+.auth-anim-scan {
+  animation: auth-scan 9s linear infinite;
+}
+
+.auth-anim-orb {
+  animation: auth-orb var(--orb-duration, 9s) ease-in-out var(--orb-delay, 0s) infinite;
+}
+
+.auth-anim-bloom {
+  animation: auth-bloom 7s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-anim-drift-a,
+  .auth-anim-drift-b,
+  .auth-anim-scan,
+  .auth-anim-orb,
+  .auth-anim-bloom {
+    animation: none !important;
+  }
+}
+
+/*
+   Bot hero control surface.
+   The hero card is a fixed-dark poster, but its lifecycle buttons (connect /
+   restart / stop) are the theme's `Button`, which is tuned for the light/dark
+   page surface. Scoping these overrides to `.hero-controls` restyles them
+   for the dark poster only — secondary/ghost pick up a white border + white
+   text, and the primary tone keeps its brand fill.
+*/
+.hero-controls .border-border {
+  border-color: color-mix(in srgb, white 18%, transparent);
+}
+.hero-controls button.bg-glass,
+.hero-controls button[data-variant="secondary"] {
+  background-color: color-mix(in srgb, white 6%, transparent);
+  color: rgb(255 255 255 / 0.85);
+}
+.hero-controls button[data-variant="secondary"]:hover,
+.hero-controls button[data-variant="ghost"]:hover {
+  background-color: color-mix(in srgb, white 12%, transparent);
+  color: #fff;
+}
+.hero-controls button[data-variant="ghost"] {
+  color: rgb(255 255 255 / 0.7);
+}
+.hero-controls button[data-variant="ghost"]:hover {
+  color: #fff;
+}

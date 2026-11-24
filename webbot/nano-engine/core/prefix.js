@@ -1,0 +1,51 @@
+/*
+⌬
+┇ ━━━[ 🥳 𝗪𝗘𝗟𝗖𝗢𝗠𝗘 𝗕𝗥𝗢𝗞 ]━━━━
+┇
+┇ ❘█▀█ █ █▀█ █▀█   ▄▀█ █
+┇ █  █ █ █▀▄ █▄█   █▀█ █    
+┇  ▀█  --N--a--n--o------A--i-----
+┇
+┇ ▭▬▭▬▭▬▭▬▭▬▭▬▭▬▭▬▭▬▭
+┇
+┇ ━━━[ 💬 𝗜𝗡𝗙𝗢𝗥𝗠𝗔𝗧𝗜𝗢𝗡 ]━━━━
+┇
+┇▫️Author  : Danz nano & Awang Ofc 
+┇▫️Website  : awangofc.my.id
+┇▫️WhatsApp : wa.me/556184127506
+┇
+┇ ▭▬▭▬▭▬▭▬▭▬▭▬▭▬▭▬▭▬▭
+┇
+┇ ━━━[ ✍️ 𝗖𝗔𝗧𝗔𝗧𝗔𝗡 ]━━━━
+┇
+┇🔸Dilarang Menghapus Creadit SC
+┇🔸Dilarang Menjual Script Nano Ai
+┇🔸Dilarang Mengatas Namakan Script!!
+⌬
+*/
+
+
+import { settings } from '../config/settings.js'
+import { getDb } from './sqlite.js'
+
+export async function getActivePrefix(chatId) {
+  const db = getDb()
+  const row = db.prepare('SELECT prefix FROM prefixes WHERE chatId = ?').get(chatId)
+  return row?.prefix || settings.defaultPrefix
+}
+
+export async function setPrefix(chatId, newPrefix) {
+  const db = getDb()
+  db.prepare(
+    'INSERT INTO prefixes (chatId, prefix) VALUES (?, ?) ON CONFLICT(chatId) DO UPDATE SET prefix = excluded.prefix'
+  ).run(chatId, newPrefix)
+  return newPrefix
+}
+
+export async function resetPrefix(chatId) {
+  const db = getDb()
+  db.prepare('DELETE FROM prefixes WHERE chatId = ?').run(chatId)
+  return settings.defaultPrefix
+}
+
+export default { getActivePrefix, setPrefix, resetPrefix }

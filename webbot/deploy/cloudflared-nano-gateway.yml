@@ -1,0 +1,30 @@
+# Cloudflare Tunnel — NANO GATEWAY
+#
+# Dipakai karena DNS domain ini mengarah langsung ke VPS (A record, DNS-only)
+# sementara port 80 tidak diteruskan ke container ini — jadi HTTP-01 /
+# certbot tidak mungkin jalan. Tunnel keluar (outbound) sehingga tidak
+# butuh port masuk sama sekali, dan TLS diterminasi di edge Cloudflare.
+#
+# Pasang:
+#   sudo cp deploy/cloudflared-nano-gateway.yml /etc/cloudflared/nano-gateway.yml
+#   sudo cp deploy/cloudflared-nano-gateway.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cloudflared-nano-gateway
+#
+# URL publik: https://wagetway.danznanooffc.my.id
+
+tunnel: ebc3f56c-4837-4bda-b7c3-2f2ce632ea8d
+credentials-file: /etc/cloudflared/ebc3f56c-4837-4bda-b7c3-2f2ce632ea8d.json
+
+ingress:
+  # Langsung ke aplikasi Next.js. nginx tidak di jalur publik supaya tidak ada
+  # hop tambahan; konfigurasi nginx tetap ada untuk akses lokal.
+  - hostname: wagetway.danznanooffc.my.id
+    service: http://127.0.0.1:3005
+    originRequest:
+      connectTimeout: 30s
+      # Jangan putus koneksi saat ada jeda antar event.
+      noHappyEyeballs: false
+      # Server-Sent Events (/api/realtime) harus mengalir, bukan dibuffer.
+      disableChunkedEncoding: false
+  - service: http_status:404
