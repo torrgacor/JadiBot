@@ -1,7 +1,0 @@
-# Rahasia & data lokal — jangan pernah di-commit
-data/tiktok/cookies.txt
-data/tiktok/
-data/stt-cache/
-*.cookies.txt
-.env
-tmp-*

@@ -1,9 +1,0 @@
-[Unit]
-Description=Nano Gateway — run backup once
-Documentation=file:///root/webbot/scripts/ops/nano-backup.sh
-
-[Service]
-Type=oneshot
-EnvironmentFile=/root/webbot/.env
-WorkingDirectory=/root/webbot
-ExecStart=/bin/bash scripts/ops/nano-backup.sh
