@@ -1,0 +1,19 @@
+# Service systemd untuk tunnel NANO GATEWAY.
+# Pasang:
+#   sudo cp deploy/cloudflared-nano-gateway.service /etc/systemd/system/
+#   sudo cp deploy/cloudflared-nano-gateway.yml /etc/cloudflared/nano-gateway.yml
+#   sudo systemctl daemon-reload && sudo systemctl enable --now cloudflared-nano-gateway
+[Unit]
+Description=Cloudflare Tunnel — NANO GATEWAY (wagetway.danznanooffc.my.id)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+TimeoutStartSec=15
+Type=notify
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared/nano-gateway.yml tunnel run
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Nano Gateway — daily point-in-time backup of DB + sessions
+Documentation=file:///root/webbot/scripts/ops/nano-backup.sh
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=nano-backup.service
+
+[Install]
+WantedBy=timers.target

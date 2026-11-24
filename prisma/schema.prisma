@@ -1,0 +1,754 @@
+// ════════════════════════════════════════════════════════════════════════════
+//  NANO GATEWAY — Prisma schema
+//
+//  PORTABILITY NOTE
+//  ────────────────
+//  This schema runs on SQLite (this box has no Postgres server) but is written
+//  to be Postgres-ready. To switch:
+//    1. change `provider` below to "postgresql"
+//    2. set DATABASE_URL to your Postgres connection string
+//    3. `npx prisma migrate dev`
+//
+//  To keep that switch a one-liner we deliberately avoid:
+//    - `enum`            → modelled as String + exported TS unions in types/enums.ts
+//    - `Json`            → modelled as String holding JSON, via lib/utils/json.ts
+//    - scalar lists []   → modelled as join tables or delimited strings
+//    - `@db.*` native types
+//    - Decimal           → money is stored as integer minor units (cents)
+// ════════════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // → "postgresql" for production
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────────────────────── users & auth ──
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  username     String  @unique
+  name         String
+  passwordHash String
+  avatarUrl    String?
+  phone        String?
+  timezone     String  @default("Asia/Jakarta")
+  locale       String  @default("en")
+
+  // "USER" | "ADMIN" | "SUPER_ADMIN"
+  role   String  @default("USER")
+  // "ACTIVE" | "SUSPENDED" | "DELETED"
+  status String  @default("ACTIVE")
+
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+
+  // two-factor auth
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret  String? // encrypted at rest — lib/security/crypto.ts
+  twoFactorBackupCodes String? // JSON string[] of hashed codes
+
+  // brute-force protection
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+
+  // theme preference: "dark" | "light" | "system"
+  themePreference String @default("dark")
+
+  notifyEmail Boolean @default(true)
+  notifyPush  Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions         LoginSession[]
+  oauthAccounts    OAuthAccount[]
+  tokens           VerificationToken[]
+  subscription     Subscription?
+  payments         Payment[]
+  whatsappSessions WhatsAppSession[]
+  messages         Message[]
+  campaigns        Campaign[]
+  contacts         Contact[]
+  contactTags      ContactTag[]
+  groups           Group[]
+  apiKeys          ApiKey[]
+  automationRules  AutomationRule[]
+  scheduledMessages ScheduledMessage[]
+  notifications    Notification[]
+  tickets          Ticket[]
+  ticketMessages   TicketMessage[]
+  activityLogs     ActivityLog[]
+  apiRequestLogs   ApiRequestLog[]
+  jobs             Job[]
+
+  @@index([status])
+  @@index([role])
+  @@index([createdAt])
+}
+
+/// A logged-in browser/device session. Backs "active sessions" + revoke device.
+model LoginSession {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tokenHash    String   @unique // HMAC-SHA256(AUTH_SECRET) of the session token — the raw token is never stored
+  userAgent    String?
+  ip           String?
+  device       String? // parsed: "Chrome on Linux"
+  location     String?
+  rememberMe   Boolean  @default(false)
+
+  createdAt    DateTime @default(now())
+  lastActiveAt DateTime @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+}
+
+model OAuthAccount {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider          String // "google" | "github"
+  providerAccountId String
+  createdAt         DateTime @default(now())
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+/// Email verification + password reset tokens. Only the hash is persisted.
+model VerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique // HMAC-SHA256(AUTH_SECRET) — see lib/security/crypto.ts
+  type      String // "EMAIL_VERIFY" | "PASSWORD_RESET" | "TWO_FACTOR"
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId, type])
+  @@index([expiresAt])
+}
+
+// ────────────────────────────────────────────────────────────── billing ──────
+
+model Plan {
+  id          String @id @default(cuid())
+  slug        String @unique // free | starter | pro | business
+  name        String
+  description String
+
+  priceMonthly Int @default(0) // minor units (cents), 8000 = $80.00
+  priceYearly  Int @default(0)
+  currency     String @default("USD")
+
+  // quotas — -1 = unlimited
+  maxWhatsappSessions Int @default(1)
+  maxMessagesPerDay   Int @default(100)
+  maxApiRequestsDay   Int @default(1000)
+  maxContacts         Int @default(100)
+  maxAutomationRules  Int @default(0)
+  maxTeamMembers      Int @default(1)
+
+  features String @default("[]") // JSON string[] of feature bullet points
+
+  /// The free-trial tier. Time-boxed rather than paid, so the storefront gives
+  /// it its own card and the checkout refuses to sell it.
+  isTrial        Boolean @default(false)
+  isPublic       Boolean @default(true)
+  sortOrder      Int     @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  subscriptions Subscription[]
+  payments      Payment[]
+}
+
+model Subscription {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id])
+
+  // "ACTIVE" | "PAST_DUE" | "CANCELED" | "EXPIRED" | "TRIALING"
+  status            String    @default("ACTIVE")
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean  @default(false)
+  canceledAt         DateTime?
+
+  // ── free trial (3 days, once per account) ──────────────────────────────
+  /// When the trial was activated. Null means never started.
+  trialStartedAt DateTime?
+  /// Hard deadline. The panel never trusts a client clock — every trial
+  /// decision compares against this column on the server.
+  trialExpiresAt DateTime?
+  /// "NONE" | "ACTIVE" | "EXPIRED" | "CONVERTED"
+  trialStatus String  @default("NONE")
+  /// Sticky: set the first time a trial is granted and never cleared, so
+  /// signing out and back in cannot hand out a second free trial.
+  trialUsed Boolean @default(false)
+
+  // ── renewal reminder ───────────────────────────────────────────────────
+  /// The `currentPeriodEnd` we have already warned about. Stored as the date
+  /// rather than a boolean so a renewal re-arms the reminder by itself: after
+  /// payment the period end moves, no longer matches this column, and the
+  /// notice is due again — no cleanup job, nothing to reset.
+  renewalNoticeFor DateTime?
+
+  // rolling usage counters reset by the worker
+  messagesUsedToday   Int @default(0)
+  apiRequestsUsedDay  Int @default(0)
+  usageResetAt        DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([trialStatus, trialExpiresAt])
+  @@index([renewalNoticeFor])
+}
+
+model Payment {
+  id             String  @id @default(cuid())
+  userId         String
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscriptionId String?
+
+  invoiceNumber String  @unique
+  amount        Int // minor units
+  currency      String  @default("USD")
+  // "SUCCESS" | "PENDING" | "FAILED" | "REFUNDED"
+  status        String  @default("PENDING")
+  method        String  @default("manual") // manual | card | bank_transfer | ewallet
+  description   String
+
+  providerRef   String?
+  paidAt        DateTime?
+  failureReason String?
+
+  // Which plan this payment settles, and for how long. Recorded when the
+  // checkout is created, so the webhook can activate the right subscription
+  // without having to trust anything in the request body.
+  planId String?
+  plan   Plan?   @relation(fields: [planId], references: [id])
+  // "monthly" | "yearly"
+  cycle  String  @default("monthly")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([createdAt])
+  @@index([providerRef])
+}
+
+// ─────────────────────────────────────────────────────── whatsapp engine ─────
+
+model WhatsAppSession {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  // Engine lifecycle state:
+  // CREATED | CONNECTING | QR_REQUIRED | PAIRING_REQUIRED | CONNECTED
+  // | DISCONNECTED | RECONNECTING | LOGGED_OUT | BANNED | ERROR
+  status      String  @default("CREATED")
+  statusMessage String?
+
+  // Populated from the live connection once linked.
+  phoneNumber  String?
+  profileName  String?
+  profilePicUrl String?
+  platform     String? // android | ios | web
+
+  // engine binding
+  driver       String @default("local-baileys") // local-baileys | nano-process
+  engineRef    String? // driver-specific handle (e.g. nano process id / engine key)
+  authStateDir String // folder holding creds/keys (Nano-compatible layout)
+
+  // behaviour settings
+  autoReconnect  Boolean @default(true)
+  alwaysOnline   Boolean @default(false)
+  readReceipts   Boolean @default(true)
+  typingSimulation Boolean @default(false)
+  defaultDelayMs Int     @default(1200)
+
+  lastConnectedAt  DateTime?
+  lastDisconnectedAt DateTime?
+  connectedSince   DateTime?
+  lastQrAt         DateTime?
+  lastError        String?
+
+  messagesSent     Int @default(0)
+  messagesReceived Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages         Message[]
+  campaigns        Campaign[]
+  scheduledMessages ScheduledMessage[]
+  groups           Group[]
+  contacts         Contact[]
+  automationRules  AutomationRule[]
+  activityLogs     ActivityLog[]
+
+  @@index([userId, status])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────── messaging ───────
+
+model Message {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   WhatsAppSession  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  campaignId String?
+  campaign  Campaign?        @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  // "text" | "image" | "video" | "audio" | "document" | "sticker" | "location" | "contact"
+  type       String  @default("text")
+  direction  String  @default("OUTBOUND") // OUTBOUND | INBOUND
+  recipient  String // wa jid or phone
+  recipientName String?
+  body       String?
+  mediaUrl   String?
+  mediaMime  String?
+  mediaSize  Int?
+  caption    String?
+  quotedId   String?
+
+  // PENDING | QUEUED | SENDING | SENT | DELIVERED | READ | FAILED
+  status      String  @default("PENDING")
+  externalId  String? // provider message id (Baileys key.id)
+  errorCode   String?
+  errorMessage String?
+
+  requestPayload  String? // JSON — what we asked the engine to send
+  responsePayload String? // JSON — what the engine returned
+
+  retryCount Int @default(0)
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  deliveredAt  DateTime?
+  readAt       DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([sessionId, status])
+  @@index([status, scheduledFor])
+  @@index([recipient])
+  @@index([externalId])
+}
+
+model Campaign {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  name        String
+  messageBody String?
+  mediaUrl    String?
+  // "text" | "image" | "video" | "audio" | "document"
+  messageType String  @default("text")
+  caption     String?
+
+  // DRAFT | RUNNING | PAUSED | COMPLETED | FAILED | CANCELED
+  status      String  @default("DRAFT")
+
+  delayMinMs  Int @default(3000)
+  delayMaxMs  Int @default(8000)
+  scheduledFor DateTime?
+
+  totalCount   Int @default(0)
+  sentCount    Int @default(0)
+  failedCount  Int @default(0)
+  pendingCount Int @default(0)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  canceledAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages Message[]
+
+  @@index([userId, status])
+  @@index([status, scheduledFor])
+}
+
+model ScheduledMessage {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  recipient    String
+  messageBody  String?
+  messageType  String  @default("text")
+  mediaUrl     String?
+  caption      String?
+
+  // PENDING | RUNNING | DONE | FAILED | CANCELED
+  status      String   @default("PENDING")
+  scheduledFor DateTime
+  recurrence  String   @default("NONE") // NONE | DAILY | WEEKLY | MONTHLY
+  nextRunAt   DateTime?
+  lastError   String?
+
+  // "send" | "bulk"
+  kind        String   @default("send")
+  payload     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, scheduledFor])
+  @@index([userId])
+}
+
+// ──────────────────────────────────────────────── contacts & groups ──────────
+
+model Contact {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   WhatsAppSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  name        String
+  phone       String
+  jid         String?
+  email       String?
+  notes       String?
+  // "active" | "inactive" | "blocked"
+  status      String @default("active")
+  lastMessageAt DateTime?
+  lastMessagePreview String?
+
+  avatarUrl String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tags ContactTag[]
+
+  @@unique([userId, phone])
+  @@index([userId, status])
+  @@index([userId, name])
+}
+
+model ContactTag {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contactId String
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       String
+  color     String  @default("#22c55e")
+  createdAt DateTime @default(now())
+
+  @@unique([contactId, tag])
+  @@index([userId, tag])
+}
+
+model Group {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  name         String
+  jid          String
+  description  String?
+  inviteCode   String?
+  isAdmin      Boolean @default(false)
+  memberCount  Int     @default(0)
+  pictureUrl   String?
+  createdAtWa  DateTime?
+
+  syncedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members GroupMember[]
+
+  @@unique([sessionId, jid])
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model GroupMember {
+  id       String @id @default(cuid())
+  groupId  String
+  group    Group  @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  jid      String
+  phone    String?
+  name     String?
+  isAdmin  Boolean @default(false)
+  isSuperAdmin Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, jid])
+  @@index([groupId])
+}
+
+// ────────────────────────────────────────────────────────── automation ──────
+
+model AutomationRule {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String?
+  session   WhatsAppSession? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  enabled     Boolean @default(true)
+  priority    Int     @default(0)
+
+  // trigger: "message.received" | "keyword" | "welcome"
+  trigger       String @default("message.received")
+  // "contains" | "equals" | "starts_with" | "ends_with" | "regex"
+  matchOperator String @default("contains")
+  matchValue    String @default("")
+  // "all" | "any"
+  matchMode     String @default("all")
+  // optional second condition
+  matchValue2    String?
+  matchOperator2 String?
+  caseSensitive  Boolean @default(false)
+
+  // target filter: "all" | "private" | "group"
+  chatScope String @default("all")
+
+  // actions: JSON array of { type, value, ... } — see types/automation.ts
+  actions String @default("[]")
+
+  triggerCount Int       @default(0)
+  lastTriggeredAt DateTime?
+  cooldownSeconds Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, enabled])
+  @@index([sessionId, enabled])
+}
+
+// ─────────────────────────────────────────────────────────────── api keys ────
+
+model ApiKey {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  prefix    String // shown in UI, e.g. "ng_live_a1b2"
+  keyHash   String @unique // HMAC-SHA256(AUTH_SECRET) of the full key — raw key shown exactly once
+  lastFour  String
+
+  scopes String @default("[]") // JSON string[] e.g. ["messages:send","sessions:read"]
+
+  lastUsedAt   DateTime?
+  requestCount Int       @default(0)
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, revokedAt])
+  @@index([keyHash])
+}
+
+model ApiRequestLog {
+  id        String  @id @default(cuid())
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  apiKeyId  String?
+
+  method     String
+  path       String
+  statusCode Int
+  durationMs Int
+  ip         String?
+  userAgent  String?
+  requestBody  String?
+  errorMessage String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([statusCode])
+}
+
+// ───────────────────────────────────────────── notifications & tickets ───────
+
+model Notification {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // SESSION_DISCONNECTED | MESSAGE_FAILED | API_LIMIT | PAYMENT_SUCCESS
+  // | SUBSCRIPTION_EXPIRED | SECURITY_ALERT | SYSTEM | TICKET_REPLY
+  type     String
+  severity String @default("info") // info | success | warning | error
+  title    String
+  message  String
+  actionUrl String?
+  metadata String? // JSON
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt, createdAt])
+  @@index([userId, type])
+}
+
+model Ticket {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  reference String @unique // QG-2026-0001
+  subject   String
+  // BILLING | TECHNICAL | WHATSAPP_SESSION | API | OTHER
+  category  String @default("TECHNICAL")
+  // LOW | NORMAL | HIGH | URGENT
+  priority  String @default("NORMAL")
+  // OPEN | PENDING | ANSWERED | CLOSED
+  status    String @default("OPEN")
+
+  assignedToId String?
+  attachmentUrl String?
+  lastReplyAt   DateTime?
+  closedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages TicketMessage[]
+
+  @@index([userId, status])
+  @@index([status, priority])
+}
+
+model TicketMessage {
+  id       String @id @default(cuid())
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  body          String
+  isStaffReply  Boolean @default(false)
+  attachmentUrl String?
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId, createdAt])
+}
+
+// ─────────────────────────────────────────────────── logs, jobs, outbox ──────
+
+model ActivityLog {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId String?
+  session WhatsAppSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  // session.connected | message.sent | api.request | session.disconnected ...
+  event   String
+  title   String
+  detail  String?
+  // "info" | "success" | "warning" | "error"
+  level   String  @default("info")
+  metadata String? // JSON
+  ip      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([event, createdAt])
+}
+
+/// DB-backed job queue. The worker (workers/queue-worker.ts) drains this table
+/// with retry + exponential backoff. Swap for Redis/BullMQ behind the same
+/// interface in lib/queue/index.ts when a Redis instance is available.
+model Job {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // send_message | campaign_batch | delivery_receipt
+  // | sync_groups | scheduled_message | usage_reset | subscription_renewal | cleanup
+  type String
+  // PENDING | RUNNING | DONE | FAILED | DEAD
+  status String @default("PENDING")
+  priority Int  @default(0)
+
+  payload String @default("{}") // JSON
+
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  runAt       DateTime  @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+  result      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  finishedAt DateTime?
+
+  @@index([status, runAt, priority])
+  @@index([type, status])
+  @@index([lockedAt])
+}
+
+/// Outbound email. Without SMTP configured these stay in the table and are
+/// surfaced in the admin panel, so verification/reset flows are still testable.
+model Outbox {
+  id      String @id @default(cuid())
+  to      String
+  subject String
+  body    String
+  // PENDING | SENT | FAILED
+  status  String @default("PENDING")
+  error   String?
+  sentAt  DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([status, createdAt])
+}
